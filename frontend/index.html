@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>CYBERTRACE // Autonomous Network Telemetry &amp; Diagnostics</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&amp;family=Space+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Space Grotesk', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            cyber: {
+              bg: '#050711',
+              card: '#0c1020',
+              border: '#1a263d',
+              cyan: '#00f0ff',
+              emerald: '#10b981',
+              purple: '#a855f7',
+              amber: '#f59e0b',
+              rose: '#f43f5e'
+            }
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    body {
+      font-family: 'Space Grotesk', sans-serif;
+      background-color: #050711;
+      color: #e2e8f0;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .glass-panel {
+      background: rgba(12, 16, 32, 0.72);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(0, 240, 255, 0.15);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
+    }
+    .glow-cyan {
+      box-shadow: 0 0 25px -5px rgba(0, 240, 255, 0.5);
+    }
+    .glow-emerald {
+      box-shadow: 0 0 25px -5px rgba(16, 185, 129, 0.5);
+    }
+    .scanline {
+      background: linear-gradient(
+        to bottom,
+        rgba(255,255,255,0),
+        rgba(255,255,255,0) 50%,
+        rgba(0, 240, 255, 0.03) 50%,
+        rgba(0, 240, 255, 0.03)
+      );
+      background-size: 100% 4px;
+    }
+    /* Smooth transitions for UI dimming and card reveals */
+    .state-transition {
+      transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes pulseSlow {
+      0%, 100% { opacity: 0.9; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.97); }
+    }
+    .animate-pulse-slow {
+      animation: pulseSlow 2.5s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="relative min-h-screen w-full bg-[#050711] text-slate-100 flex flex-col justify-between select-none scanline">
+<!-- 3D INTERACTIVE THREEJS BACKGROUND (Custom Tag) -->
+<!-- STITCH_THREEJS_START:ANIMATION_1 class="fixed inset-0 w-full h-full pointer-events-none z-0 bg-transparent" -->
+<div class="fixed inset-0 w-full h-full pointer-events-none z-0 bg-transparent" style="display:block;">
+<script src="https://ajax.googleapis.com/ajax/libs/threejs/r125/three.min.js"></script>
+<div id="threejs-container-ANIMATION_1" style="width:100%;height:100%"></div>
+<script>
+(function() {
+  const container = document.getElementById('threejs-container-ANIMATION_1');
+  const devicePixelRatio = window.devicePixelRatio || 1;
+  // Interactive 3D Dynamic Network Simulation with Three.js
+// Handles Idle, Testing (Multi-step sequential analysis), and Result states
+
+const width = container.clientWidth || window.innerWidth || 390;
+const height = container.clientHeight || window.innerHeight || 844;
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x060913, 0.015);
+
+const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
+camera.position.set(0, 0, 48);
+
+const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+renderer.setSize(width, height);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+container.appendChild(renderer.domElement);
+
+// Lighting
+const ambientLight = new THREE.AmbientLight(0x1a2639, 1.5);
+scene.add(ambientLight);
+
+const pointLight = new THREE.PointLight(0x00f0ff, 2.5, 120);
+pointLight.position.set(0, 5, 25);
+scene.add(pointLight);
+
+const secondaryLight = new THREE.PointLight(0x7928ca, 2.0, 100);
+secondaryLight.position.set(-15, -10, 20);
+scene.add(secondaryLight);
+
+// Network Nodes Architecture
+// Node Types: 0: Client/Origin, 1: Local Gateway, 2: ISP Node, 3: DNS Resolver, 4: Edge CDN, 5: Cloud Core, 6: Destination Server
+const nodeConfigs = [
+  { id: 'client', name: 'Local Device', pos: [-12, -14, 2], type: 'client', ip: '192.168.1.104' },
+  { id: 'gateway', name: 'Default Gateway', pos: [-8, -6, 8], type: 'gateway', ip: '10.0.0.1' },
+  { id: 'isp', name: 'Regional Hub', pos: [-3, 2, -4], type: 'isp', ip: '172.24.8.1' },
+  { id: 'dns', name: 'DNS Root (Anycast)', pos: [7, 7, 5], type: 'dns', ip: '1.1.1.1' },
+  { id: 'edge', name: 'Edge POP Cluster', pos: [11, -3, -2], type: 'edge', ip: '104.16.12.98' },
+  { id: 'cloud', name: 'Core Backbone Mesh', pos: [2, 14, -8], type: 'cloud', ip: 'as13335.net' },
+  { id: 'dest', name: 'Target Server', pos: [12, 12, 10], type: 'dest', ip: '142.250.190.46' }
+];
+
+// Node geometry & materials
+const sphereGeo = new THREE.SphereGeometry(1.2, 24, 24);
+const coreGeo = new THREE.SphereGeometry(0.55, 16, 16);
+const ringGeo = new THREE.RingGeometry(1.5, 1.7, 32);
+
+const nodeGroup = new THREE.Group();
+scene.add(nodeGroup);
+
+const nodes = [];
+
+nodeConfigs.forEach((cfg, idx) => {
+  const nodeSubGroup = new THREE.Group();
+  nodeSubGroup.position.set(cfg.pos[0], cfg.pos[1], cfg.pos[2]);
+
+  // Outer transparent sphere
+  const outerMat = new THREE.MeshPhongMaterial({
+    color: 0x00d2ff,
+    transparent: true,
+    opacity: 0.35,
+    wireframe: true
+  });
+  const outerMesh = new THREE.Mesh(sphereGeo, outerMat);
+  nodeSubGroup.add(outerMesh);
+
+  // Inner glowing core
+  const coreMat = new THREE.MeshBasicMaterial({
+    color: 0x00f0ff
+  });
+  const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+  nodeSubGroup.add(coreMesh);
+
+  // Orbital halo ring
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: 0x00e5ff,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.25
+  });
+  const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+  ringMesh.rotation.x = Math.PI / 2;
+  nodeSubGroup.add(ringMesh);
+
+  nodeGroup.add(nodeSubGroup);
+
+  nodes.push({
+    ...cfg,
+    group: nodeSubGroup,
+    outerMesh,
+    coreMesh,
+    ringMesh,
+    baseColor: new THREE.Color(0x00d2ff),
+    activeColor: new THREE.Color(0x00ffaa),
+    accentColor: new THREE.Color(0xff0055),
+    dnsColor: new THREE.Color(0x9d4edd),
+    isIlluminated: false,
+    pulseSpeed: 1.0 + Math.random() * 0.8
+  });
+});
+
+// Ambient Floating Network Dust/Particles
+const particleCount = 180;
+const pGeom = new THREE.BufferGeometry();
+const pPositions = new Float32Array(particleCount * 3);
+const pVelocities = [];
+
+for (let i = 0; i < particleCount; i++) {
+  pPositions[i * 3] = (Math.random() - 0.5) * 80;
+  pPositions[i * 3 + 1] = (Math.random() - 0.5) * 80;
+  pPositions[i * 3 + 2] = (Math.random() - 0.5) * 50;
+  pVelocities.push({
+    x: (Math.random() - 0.5) * 0.02,
+    y: (Math.random() - 0.5) * 0.02,
+    z: (Math.random() - 0.5) * 0.02
+  });
+}
+pGeom.setAttribute('position', new THREE.BufferAttribute(pPositions, 3));
+const pMat = new THREE.PointsMaterial({
+  color: 0x38bdf8,
+  size: 0.85,
+  transparent: true,
+  opacity: 0.45,
+  blending: THREE.AdditiveBlending
+});
+const particles = new THREE.Points(pGeom, pMat);
+scene.add(particles);
+
+// Connection Lines (Paths) between Nodes
+const connections = [
+  [0, 1], // client -> gateway
+  [1, 2], // gateway -> isp
+  [2, 3], // isp -> dns
+  [2, 4], // isp -> edge
+  [3, 5], // dns -> cloud
+  [4, 5], // edge -> cloud
+  [5, 6], // cloud -> dest
+  [4, 6]  // edge -> dest
+];
+
+const connectionLines = [];
+const linesGroup = new THREE.Group();
+scene.add(linesGroup);
+
+connections.forEach(([fromIdx, toIdx], cIdx) => {
+  const p1 = new THREE.Vector3(...nodeConfigs[fromIdx].pos);
+  const p2 = new THREE.Vector3(...nodeConfigs[toIdx].pos);
+  
+  // Curved line via QuadraticBezier
+  const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
+  mid.z += (cIdx % 2 === 0 ? 3.5 : -3.5);
+  const curve = new THREE.QuadraticBezierCurve3(p1, mid, p2);
+  const points = curve.getPoints(32);
+  const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+  
+  const lineMat = new THREE.LineBasicMaterial({
+    color: 0x1e3a5f,
+    transparent: true,
+    opacity: 0.35,
+    linewidth: 1
+  });
+  
+  const lineMesh = new THREE.Line(lineGeo, lineMat);
+  linesGroup.add(lineMesh);
+  
+  connectionLines.push({
+    from: fromIdx,
+    to: toIdx,
+    curve,
+    mesh: lineMesh,
+    material: lineMat,
+    isActive: false,
+    progress: 0
+  });
+});
+
+// Active Glowing Traveling Packets
+const packetCount = 20;
+const packets = [];
+const packetGeo = new THREE.SphereGeometry(0.35, 12, 12);
+const packetMat = new THREE.MeshBasicMaterial({
+  color: 0x00ffff,
+  transparent: true,
+  opacity: 0.95
+});
+
+for (let i = 0; i < packetCount; i++) {
+  const pMesh = new THREE.Mesh(packetGeo, packetMat.clone());
+  pMesh.visible = false;
+  scene.add(pMesh);
+  packets.push({
+    mesh: pMesh,
+    active: false,
+    connIdx: 0,
+    t: 0,
+    speed: 0.015,
+    type: 'ping'
+  });
+}
+
+// Global State Machine accessible from Window
+window.networkSim = {
+  state: 'IDLE', // 'IDLE' | 'TESTING' | 'RESULT'
+  subState: '', // 'CONNECTING', 'LATENCY', 'JITTER', 'DNS', 'TRACEROUTE', 'HEALTH'
+  targetCameraZ: 48,
+  targetCameraX: 0,
+  targetCameraY: 0,
+  
+  setState: function(newState, subState = '') {
+    this.state = newState;
+    this.subState = subState;
+    
+    if (newState === 'IDLE') {
+      this.targetCameraZ = 48;
+      this.targetCameraX = 0;
+      this.targetCameraY = 0;
+      pointLight.intensity = 2.0;
+      pointLight.color.setHex(0x00f0ff);
+      pMat.color.setHex(0x38bdf8);
+      pMat.opacity = 0.45;
+      
+      nodes.forEach(n => {
+        n.coreMesh.material.color.setHex(0x00f0ff);
+        n.outerMesh.material.color.setHex(0x00d2ff);
+        n.outerMesh.material.opacity = 0.35;
+        n.ringMesh.material.opacity = 0.25;
+      });
+      
+      connectionLines.forEach(cl => {
+        cl.material.color.setHex(0x1e3a5f);
+        cl.material.opacity = 0.3;
+      });
+      
+      packets.forEach(p => { p.mesh.visible = false; p.active = false; });
+    }
+    
+    if (newState === 'TESTING') {
+      pointLight.intensity = 3.8;
+      
+      if (subState === 'CONNECTING') {
+        this.targetCameraZ = 44;
+        this.targetCameraX = -5;
+        this.targetCameraY = -6;
+        pointLight.color.setHex(0x00f0ff);
+        // Illuminate origin
+        nodes[0].coreMesh.material.color.setHex(0x38bdf8);
+        nodes[1].coreMesh.material.color.setHex(0x38bdf8);
+        connectionLines[0].material.color.setHex(0x00f0ff);
+        connectionLines[0].material.opacity = 0.9;
+        this.spawnPackets(0, 3, 0.025, 0x00ffff);
+      } else if (subState === 'LATENCY') {
+        this.targetCameraZ = 40;
+        this.targetCameraX = 0;
+        this.targetCameraY = 0;
+        pointLight.color.setHex(0x10b981);
+        connectionLines[1].material.color.setHex(0x10b981);
+        connectionLines[1].material.opacity = 0.95;
+        // High speed packet barrage back and forth
+        this.spawnPackets(1, 8, 0.055, 0x10b981);
+      } else if (subState === 'JITTER') {
+        this.targetCameraZ = 42;
+        this.targetCameraX = 3;
+        this.targetCameraY = -2;
+        pointLight.color.setHex(0xf59e0b);
+        connectionLines[3].material.color.setHex(0xf59e0b);
+        connectionLines[3].material.opacity = 0.9;
+        this.spawnPackets(3, 7, 0.04, 0xfbbf24);
+      } else if (subState === 'DNS') {
+        this.targetCameraZ = 36;
+        this.targetCameraX = 6;
+        this.targetCameraY = 6;
+        pointLight.color.setHex(0xa855f7);
+        // Highlight DNS node
+        nodes[3].coreMesh.material.color.setHex(0xc084fc);
+        nodes[3].outerMesh.material.color.setHex(0xa855f7);
+        nodes[3].outerMesh.material.opacity = 0.9;
+        connectionLines[2].material.color.setHex(0xa855f7);
+        connectionLines[2].material.opacity = 0.95;
+        this.spawnPackets(2, 6, 0.03, 0xc084fc);
+      } else if (subState === 'TRACEROUTE') {
+        this.targetCameraZ = 46;
+        this.targetCameraX = 2;
+        this.targetCameraY = 4;
+        pointLight.color.setHex(0x06b6d4);
+        // Progressively light hops
+        nodes.forEach((n, i) => {
+          setTimeout(() => {
+            n.coreMesh.material.color.setHex(0x22d3ee);
+            n.outerMesh.material.opacity = 0.8;
+          }, i * 180);
+        });
+        connectionLines.forEach((cl, idx) => {
+          setTimeout(() => {
+            cl.material.color.setHex(0x06b6d4);
+            cl.material.opacity = 0.85;
+          }, idx * 140);
+        });
+        this.spawnPackets(4, 5, 0.03, 0x22d3ee);
+        this.spawnPackets(6, 5, 0.03, 0x22d3ee);
+      } else if (subState === 'HEALTH') {
+        this.targetCameraZ = 45;
+        this.targetCameraX = 0;
+        this.targetCameraY = 2;
+        pointLight.color.setHex(0x10b981);
+        nodes.forEach(n => {
+          n.coreMesh.material.color.setHex(0x34d399);
+          n.outerMesh.material.color.setHex(0x10b981);
+          n.outerMesh.material.opacity = 0.75;
+          n.ringMesh.material.opacity = 0.6;
+        });
+        connectionLines.forEach(cl => {
+          cl.material.color.setHex(0x34d399);
+          cl.material.opacity = 0.8;
+        });
+        for (let i = 0; i < connections.length; i++) {
+          this.spawnPackets(i, 2, 0.02, 0x6ee7b7);
+        }
+      }
+    }
+    
+    if (newState === 'RESULT') {
+      this.targetCameraZ = 46;
+      this.targetCameraX = 3;
+      this.targetCameraY = 3;
+      pointLight.intensity = 2.2;
+      pointLight.color.setHex(0x10b981);
+      
+      // Stable illuminated destination and mesh
+      nodes.forEach((n, i) => {
+        if (i === 6) { // Target destination
+          n.coreMesh.material.color.setHex(0x10b981);
+          n.outerMesh.material.color.setHex(0x34d399);
+          n.outerMesh.material.opacity = 0.9;
+          n.ringMesh.material.opacity = 0.8;
+          n.ringMesh.scale.set(1.4, 1.4, 1.4);
+        } else {
+          n.coreMesh.material.color.setHex(0x0284c7);
+          n.outerMesh.material.opacity = 0.4;
+        }
+      });
+      
+      connectionLines.forEach(cl => {
+        cl.material.color.setHex(0x0369a1);
+        cl.material.opacity = 0.45;
+      });
+      
+      // Gentle pulse on destination connection
+      connectionLines[6].material.color.setHex(0x10b981);
+      connectionLines[6].material.opacity = 0.9;
+      this.spawnPackets(6, 2, 0.015, 0x34d399);
+    }
+  },
+  
+  spawnPackets: function(connIdx, count, speed, colorHex) {
+    let allocated = 0;
+    for (let p of packets) {
+      if (!p.active && allocated < count) {
+        p.active = true;
+        p.connIdx = connIdx % connections.length;
+        p.t = Math.random() * 0.4;
+        p.speed = speed;
+        p.mesh.material.color.setHex(colorHex);
+        p.mesh.visible = true;
+        allocated++;
+      }
+    }
+  }
+};
+
+// Animation Loop
+let clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const delta = clock.getDelta();
+  const time = clock.getElapsedTime();
+
+  // Camera smooth interpolation
+  camera.position.z += (window.networkSim.targetCameraZ - camera.position.z) * 0.04;
+  camera.position.x += (window.networkSim.targetCameraX - camera.position.x) * 0.04;
+  camera.position.y += (window.networkSim.targetCameraY - camera.position.y) * 0.04;
+  camera.lookAt(0, 0, 0);
+
+  // Subtle ambient rotation of network
+  const rotSpeed = window.networkSim.state === 'TESTING' ? 0.25 : 0.06;
+  nodeGroup.rotation.y = Math.sin(time * rotSpeed * 0.4) * 0.15;
+  nodeGroup.rotation.x = Math.cos(time * rotSpeed * 0.3) * 0.08;
+  linesGroup.rotation.y = nodeGroup.rotation.y;
+  linesGroup.rotation.x = nodeGroup.rotation.x;
+
+  // Particle float
+  const pPos = particles.geometry.attributes.position.array;
+  const pSpeedMult = window.networkSim.state === 'TESTING' ? 2.5 : 1.0;
+  for (let i = 0; i < particleCount; i++) {
+    pPos[i * 3 + 1] += Math.sin(time + i) * 0.015 * pSpeedMult;
+    pPos[i * 3] += Math.cos(time + i * 0.5) * 0.01 * pSpeedMult;
+  }
+  particles.geometry.attributes.position.needsUpdate = true;
+
+  // Pulse node rings
+  nodes.forEach((n, idx) => {
+    n.ringMesh.rotation.z += 0.01 * n.pulseSpeed;
+    const pulse = Math.sin(time * 2.5 * n.pulseSpeed + idx) * 0.15 + 1.0;
+    n.outerMesh.scale.set(pulse, pulse, pulse);
+  });
+
+  // Animate traveling packets along connection curves
+  packets.forEach(p => {
+    if (p.active) {
+      p.t += p.speed;
+      if (p.t >= 1.0) {
+        if (window.networkSim.state === 'TESTING') {
+          p.t = 0; // Loop during testing
+        } else if (window.networkSim.state === 'RESULT') {
+          p.t = 0;
+        } else {
+          p.active = false;
+          p.mesh.visible = false;
+        }
+      }
+      const curve = connectionLines[p.connIdx].curve;
+      const point = curve.getPoint(p.t);
+      // Transform according to group rotation
+      const v = point.clone().applyEuler(nodeGroup.rotation);
+      p.mesh.position.copy(v);
+    }
+  });
+
+  renderer.render(scene, camera);
+}
+
+animate();
+
+// Resize listener
+window.addEventListener('resize', () => {
+  const w = container.clientWidth || window.innerWidth || 390;
+  const h = container.clientHeight || window.innerHeight || 844;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+});
+
+})();
+</script>
+</div>
+<!-- STITCH_THREEJS_END:ANIMATION_1 -->
+<!-- Ambient Radial Vignette Layer -->
+<div class="fixed inset-0 pointer-events-none z-[1] bg-gradient-to-b from-[#050711]/70 via-transparent to-[#050711]/90"></div>
+<div class="fixed inset-0 pointer-events-none z-[1]" style="background: radial-gradient(circle at 50% 40%, transparent 20%, rgba(5,7,17,0.7) 80%);"></div>
+<!-- MAIN APP WRAPPER (Mobile optimized 390px viewport container) -->
+<div class="relative z-10 w-full max-w-[440px] mx-auto min-h-screen flex flex-col justify-between px-4 py-5 safe-top safe-bottom">
+<!-- TOP TELEMETRY BAR & NAVIGATION -->
+<header class="state-transition flex items-center justify-between py-2 px-3 rounded-2xl glass-panel border border-cyan-500/20" id="top-nav">
+<div class="flex items-center space-x-2.5">
+<div class="relative flex items-center justify-center w-8 h-8 rounded-lg bg-cyan-950/60 border border-cyan-400/40 text-cyan-400">
+<svg class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" style="animation-duration: 9s;" viewbox="0 0 24 24">
+<path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+</div>
+<div>
+<div class="flex items-center space-x-1.5">
+<span class="text-xs font-bold tracking-widest text-cyan-300 font-mono">CYBERTRACE</span>
+<span class="px-1.5 py-0.2 text-[9px] font-mono uppercase rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 font-semibold">v4.8</span>
+</div>
+<p class="text-[10px] text-slate-400 font-mono tracking-tight">NODE: US-WEST-OR1</p>
+</div>
+</div>
+<div class="flex items-center space-x-2">
+<div class="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-900/80 border border-slate-700/60" id="status-pill">
+<span class="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#00f0ff]" id="status-dot"></span>
+<span class="text-[11px] font-mono uppercase tracking-wider text-slate-300" id="status-text">IDLE</span>
+</div>
+<button class="p-1.5 rounded-lg bg-slate-800/60 hover:bg-slate-700/60 text-slate-400 hover:text-cyan-400 border border-slate-700/50 transition" onclick="resetTest()" title="Reset to Idle">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+</div>
+</header>
+<!-- CENTER HERO / DYNAMIC TELEMETRY DISPLAY -->
+<main class="my-auto flex flex-col items-center justify-center text-center py-4 w-full">
+<!-- IDLE STATE CONTAINER -->
+<section class="state-transition flex flex-col items-center w-full" id="state-idle">
+<div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs font-mono mb-4">
+<span class="inline-block w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+          REAL-TIME 3D TOPOLOGY READY
+        </div>
+<h1 class="text-3xl font-extrabold tracking-tight text-white mb-2 leading-tight">
+          Global Network <br/>
+<span class="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-sky-300 to-indigo-400">Deep Diagnostics</span>
+</h1>
+<p class="text-sm text-slate-300 max-w-[300px] mb-6 leading-relaxed">
+          Ready to analyze your network. Probes latency hops, DNS resolving, packet jitter, and overall mesh resilience in real-time.
+        </p>
+<!-- Target Info Pill -->
+<div class="w-full glass-panel rounded-xl p-3 mb-6 flex items-center justify-between text-left">
+<div class="flex items-center space-x-3">
+<div class="w-7 h-7 rounded-lg bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 text-xs">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<div>
+<span class="text-[10px] text-slate-400 font-mono block uppercase">Target Cluster</span>
+<span class="text-xs font-semibold text-slate-200 font-mono">edge.telemetry-mesh.io</span>
+</div>
+</div>
+<span class="text-[11px] font-mono text-cyan-400 bg-cyan-950/60 px-2 py-1 rounded border border-cyan-800/60">IPv6 / IPv4</span>
+</div>
+<!-- Primary Trigger Button -->
+<button class="group relative w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-600 text-slate-950 font-bold text-base tracking-wide uppercase transition-all duration-300 shadow-[0_0_30px_rgba(0,240,255,0.4)] hover:shadow-[0_0_40px_rgba(0,240,255,0.7)] active:scale-[0.98] overflow-hidden flex items-center justify-center space-x-3" id="btn-run" onclick="startNetworkTest()">
+<div class="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
+<svg class="w-5 h-5 text-slate-950" fill="currentColor" viewbox="0 0 20 20">
+<path clip-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" fill-rule="evenodd"></path>
+</svg>
+<span>RUN NETWORK TEST</span>
+</button>
+</section>
+<!-- TESTING STATE CONTAINER (Active Live Telemetry) -->
+<section class="state-transition hidden flex-col items-center w-full" id="state-testing">
+<!-- Live Status Display Ring -->
+<div class="relative w-44 h-44 mb-6 flex items-center justify-center">
+<!-- Circular Progress Ring SVG -->
+<svg class="w-full h-full -rotate-90" viewbox="0 0 120 120">
+<circle cx="60" cy="60" fill="none" r="52" stroke="#111827" stroke-width="6"></circle>
+<circle class="transition-all duration-300 ease-out" cx="60" cy="60" fill="none" id="test-progress-circle" r="52" stroke="url(#cyanGrad)" stroke-dasharray="326.7" stroke-dashoffset="326.7" stroke-linecap="round" stroke-width="6"></circle>
+<defs>
+<lineargradient id="cyanGrad" x1="0%" x2="100%" y1="0%" y2="100%">
+<stop offset="0%" stop-color="#00f0ff"></stop>
+<stop offset="50%" stop-color="#a855f7"></stop>
+<stop offset="100%" stop-color="#10b981"></stop>
+</lineargradient>
+</defs>
+</svg>
+<!-- Inside Ring Content -->
+<div class="absolute inset-0 flex flex-col items-center justify-center p-4">
+<span class="text-[10px] font-mono text-cyan-400 tracking-widest uppercase mb-0.5" id="test-stage-counter">STAGE 1/6</span>
+<div class="text-3xl font-extrabold font-mono text-white tracking-tight" id="test-numeric-metric">--</div>
+<span class="text-[11px] font-mono text-slate-400" id="test-metric-unit">HANDSHAKE</span>
+</div>
+<!-- Pulsing Radar Indicator -->
+<div class="absolute -inset-2 rounded-full border border-cyan-400/20 animate-ping opacity-75 pointer-events-none"></div>
+</div>
+<!-- Current Operation Banner -->
+<div class="glass-panel w-full rounded-2xl p-4 border border-cyan-400/30 mb-4 text-center">
+<div class="flex items-center justify-center space-x-2 mb-1">
+<span class="inline-block w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping" id="testing-spinner"></span>
+<h2 class="text-base font-bold font-mono tracking-wider text-cyan-300 uppercase" id="testing-headline">CONNECTING...</h2>
+</div>
+<p class="text-xs text-slate-300 font-mono" id="testing-subtext">Synthesizing virtual gateway hop...</p>
+</div>
+<!-- Dynamic Hop/Event Log Ticker -->
+<div class="w-full glass-panel rounded-xl p-3 border border-slate-800 text-left">
+<div class="flex items-center justify-between text-[10px] font-mono text-slate-400 mb-2 border-b border-slate-800 pb-1.5">
+<span class="flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              LIVE PACKET STREAM
+            </span>
+<span class="text-cyan-400 font-semibold" id="packets-stat">TX: 124 pkts</span>
+</div>
+<div class="space-y-1 font-mono text-[11px] text-slate-300 h-16 overflow-hidden flex flex-col justify-end" id="event-log-container">
+<div class="text-slate-400">&gt; SYN-SENT [192.168.1.104]</div>
+<div class="text-cyan-400">&gt; ACK-RCVD from Gateway [10.0.0.1]</div>
+</div>
+</div>
+</section>
+<!-- RESULT STATE CONTAINER (Stable Network & Cards) -->
+<section class="state-transition hidden flex-col items-center w-full" id="state-result">
+<!-- Badge -->
+<div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono font-semibold mb-3">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
+</svg>
+          ANALYSIS COMPLETE
+        </div>
+<!-- Overall Score Ring Banner -->
+<div class="w-full glass-panel rounded-2xl p-4 border border-emerald-400/40 glow-emerald mb-4 flex items-center justify-between">
+<div>
+<span class="text-[10px] font-mono text-emerald-400 tracking-widest uppercase block">OVERALL MESH HEALTH</span>
+<h2 class="text-2xl font-black tracking-tight text-white flex items-baseline gap-1.5">
+<span>OPTIMAL</span>
+<span id="health-score" class="text-xs font-mono font-normal text-emerald-400/80">-- / 100</span>
+</h2>
+<p class="text-[11px] text-slate-300 font-mono mt-0.5">Route jitter minimal • 0% Packet Loss</p>
+</div>
+<div class="relative w-16 h-16 flex items-center justify-center">
+<svg class="w-16 h-16 -rotate-90" viewbox="0 0 36 36">
+<path class="text-slate-800" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3.5"></path>
+<path class="text-emerald-400" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="98, 100" stroke-linecap="round" stroke-width="3.5"></path>
+</svg>
+<span class="absolute font-mono font-black text-sm text-white">98%</span>
+</div>
+</div>
+<!-- High-Impact 4-Metric Grid -->
+<div class="grid grid-cols-2 gap-2.5 w-full mb-4">
+<!-- Latency Card -->
+<div class="glass-panel p-3 rounded-xl border border-cyan-500/20 text-left">
+<div class="flex items-center justify-between text-slate-400 mb-1">
+<span class="text-[10px] font-mono uppercase">LATENCY (RTT)</span>
+<svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<div class="text-xl font-bold font-mono text-cyan-300"><span id="result-latency">--</span> <span class="text-xs text-slate-400">ms</span></div>
+<span class="text-[10px] text-emerald-400 font-mono">▲ Ultra Fast (A+)</span>
+</div>
+<!-- Jitter Card -->
+<div class="glass-panel p-3 rounded-xl border border-amber-500/20 text-left">
+<div class="flex items-center justify-between text-slate-400 mb-1">
+<span class="text-[10px] font-mono uppercase">JITTER</span>
+<svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<div class="text-xl font-bold font-mono text-amber-300"><span id="result-jitter">--</span> <span class="text-xs text-slate-400">ms</span></div>
+<span class="text-[10px] text-emerald-400 font-mono">Stability: 99.8%</span>
+</div>
+<!-- DNS Resolution Card -->
+<div class="glass-panel p-3 rounded-xl border border-purple-500/20 text-left">
+<div class="flex items-center justify-between text-slate-400 mb-1">
+<span class="text-[10px] font-mono uppercase">DNS LOOKUP</span>
+<svg class="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<div class="text-xl font-bold font-mono text-purple-300"><span id="result-dns">--</span> <span class="text-xs text-slate-400">ms</span></div>
+<span class="text-[10px] text-purple-400 font-mono">Anycast (1.1.1.1)</span>
+</div>
+<!-- Traceroute Hops Card -->
+<div class="glass-panel p-3 rounded-xl border border-emerald-500/20 text-left">
+<div class="flex items-center justify-between text-slate-400 mb-1">
+<span class="text-[10px] font-mono uppercase">ROUTE HOPS</span>
+<svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<div class="text-xl font-bold font-mono text-emerald-300">
+  <span id="result-hops">--</span>
+  <span class="text-xs text-slate-400">hops</span>
+</div>
+<span class="text-[10px] text-slate-400 font-mono">
+  <span id="result-dropouts">--</span> dropouts
+</span>
+</div>
+</div>
+<!-- Retest Button -->
+<button class="w-full py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 border border-cyan-500/40 text-cyan-300 font-bold font-mono text-xs tracking-wider uppercase transition flex items-center justify-center space-x-2" onclick="startNetworkTest()">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>RE-RUN TELEMETRY TEST</span>
+</button>
+</section>
+</main>
+<!-- FOOTER TELEMETRY DOCK -->
+<footer class="state-transition glass-panel rounded-2xl p-3 border border-slate-800 flex items-center justify-between text-[11px] font-mono text-slate-400" id="bottom-dock">
+<div class="flex items-center space-x-2">
+<span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+<span id="footer-mode">3D SIMULATOR: LIVE</span>
+</div>
+<div class="flex items-center space-x-3">
+<span>FPS: <span class="text-cyan-400">60</span></span>
+<span class="text-slate-600">|</span>
+<span class="text-slate-300">WEBGL 2.0</span>
+</div>
+</footer>
+</div>
+<!-- STATE MACHINE AND ORCHESTRATION LOGIC -->
+<script>
+    const stateIdle = document.getElementById('state-idle');
+    const stateTesting = document.getElementById('state-testing');
+    const stateResult = document.getElementById('state-result');
+
+    const topNav = document.getElementById('top-nav');
+    const bottomDock = document.getElementById('bottom-dock');
+    const statusPill = document.getElementById('status-pill');
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+
+    const testProgressCircle = document.getElementById('test-progress-circle');
+    const testStageCounter = document.getElementById('test-stage-counter');
+    const testNumericMetric = document.getElementById('test-numeric-metric');
+    const testMetricUnit = document.getElementById('test-metric-unit');
+    const testingHeadline = document.getElementById('testing-headline');
+    const testingSubtext = document.getElementById('testing-subtext');
+    const eventLogContainer = document.getElementById('event-log-container');
+    const packetsStat = document.getElementById('packets-stat');
+    const footerMode = document.getElementById('footer-mode');
+
+    let currentTestTimer = null;
+
+    function appendLog(msg, colorClass = 'text-slate-300') {
+      const el = document.createElement('div');
+      el.className = colorClass;
+      el.innerHTML = '&gt; ' + msg;
+      eventLogContainer.appendChild(el);
+      if (eventLogContainer.children.length > 4) {
+        eventLogContainer.removeChild(eventLogContainer.children[0]);
+      }
+    }
+
+    function setCircleProgress(percent) {
+      const circumference = 326.7;
+      const offset = circumference - (percent / 100) * circumference;
+      testProgressCircle.style.strokeDashoffset = offset;
+    }
+
+    function resetTest() {
+      if (currentTestTimer) clearTimeout(currentTestTimer);
+      
+      stateIdle.classList.remove('hidden');
+      stateTesting.classList.add('hidden');
+      stateResult.classList.add('hidden');
+
+      topNav.style.opacity = '1';
+      bottomDock.style.opacity = '1';
+
+      statusDot.className = 'w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#00f0ff]';
+      statusText.innerText = 'IDLE';
+      footerMode.innerText = '3D SIMULATOR: LIVE';
+
+      if (window.networkSim && window.networkSim.setState) {
+        window.networkSim.setState('IDLE');
+      }
+    }
+
+    function startNetworkTest() {
+      // Transition from IDLE or RESULT into TESTING
+      stateIdle.classList.add('hidden');
+      stateResult.classList.add('hidden');
+      stateTesting.classList.remove('hidden');
+
+      // Dim non-essential UI
+      topNav.style.opacity = '0.4';
+      bottomDock.style.opacity = '0.4';
+
+      statusDot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-ping';
+      statusText.innerText = 'TESTING';
+      footerMode.innerText = 'DIAGNOSTIC IN PROGRESS';
+
+      // Reset log
+      eventLogContainer.innerHTML = '';
+      appendLog('Diagnostic sequence initiated', 'text-cyan-400');
+      setCircleProgress(5);
+
+      // Sequence of test stages
+      const stages = [
+        {
+          subState: 'CONNECTING',
+          title: 'CONNECTING...',
+          subtext: 'Initiating TCP/TLS handshake with edge gateway...',
+          metric: 'SYN',
+          unit: 'HANDSHAKE',
+          progress: 15,
+          packets: 'TX: 38 pkts',
+          log: 'Local socket opened: [192.168.1.104]:54210',
+          logColor: 'text-slate-400',
+          duration: 1200
+        },
+        {
+          subState: 'LATENCY',
+          title: 'MEASURING LATENCY...',
+          subtext: 'Dispatching high-frequency ICMP round-trip packets...',
+          metric: '14.2',
+          unit: 'MILLISECONDS',
+          progress: 35,
+          packets: 'TX: 180 pkts',
+          log: 'ICMP ping response: min 13.8ms / avg 14.2ms',
+          logColor: 'text-emerald-400',
+          duration: 1400
+        },
+        {
+          subState: 'JITTER',
+          title: 'ANALYZING JITTER...',
+          subtext: 'Evaluating packet arrival time variance & stream drift...',
+          metric: '1.1',
+          unit: 'MS VARIANCE',
+          progress: 55,
+          packets: 'TX: 340 pkts',
+          log: 'Buffer variance verified: ±1.1ms (99.8% stable)',
+          logColor: 'text-amber-400',
+          duration: 1300
+        },
+        {
+          subState: 'DNS',
+          title: 'CHECKING DNS...',
+          subtext: 'Lookup query: resolving domain via Anycast root...',
+          metric: '8.4',
+          unit: 'DNS RESOLVE',
+          progress: 75,
+          packets: 'TX: 460 pkts',
+          log: 'A-Record resolved: 142.250.190.46 via 1.1.1.1',
+          logColor: 'text-purple-400',
+          duration: 1300
+        },
+        {
+          subState: 'TRACEROUTE',
+          title: 'TRACING NETWORK PATH...',
+          subtext: 'Traversing intermediate router nodes hop-by-hop...',
+          metric: '7',
+          unit: 'ACTIVE HOPS',
+          progress: 90,
+          packets: 'TX: 620 pkts',
+          log: 'Hop 7 reached destination with 0 packet drops',
+          logColor: 'text-cyan-400',
+          duration: 1400
+        },
+        {
+          subState: 'HEALTH',
+          title: 'CALCULATING NETWORK HEALTH...',
+          subtext: 'Synthesizing global path score & bandwidth topology...',
+          metric: '98%',
+          unit: 'HEALTH INDEX',
+          progress: 100,
+          packets: 'TX: 780 pkts',
+          log: 'All nodes validated. Mesh matrix synchronized.',
+          logColor: 'text-emerald-400',
+          duration: 1200
+        }
+      ];
+
+      let currentIndex = 0;
+
+      function runStage() {
+        if (currentIndex >= stages.length) {
+          showResults();
+          return;
+        }
+
+        const stage = stages[currentIndex];
+        testStageCounter.innerText = `STAGE ${currentIndex + 1}/6`;
+        testingHeadline.innerText = stage.title;
+        testingSubtext.innerText = stage.subtext;
+        testNumericMetric.innerText = stage.metric;
+        testMetricUnit.innerText = stage.unit;
+        packetsStat.innerText = stage.packets;
+
+        setCircleProgress(stage.progress);
+        appendLog(stage.log, stage.logColor);
+
+        // Tell 3D environment to transform visuals
+        if (window.networkSim && window.networkSim.setState) {
+          window.networkSim.setState('TESTING', stage.subState);
+        }
+
+        currentIndex++;
+        currentTestTimer = setTimeout(runStage, stage.duration);
+      }
+
+      runStage();
+    }
+
+    
+function showResults() {
+  stateTesting.classList.add('hidden');
+  stateResult.classList.remove('hidden');
+
+  topNav.style.opacity = '1';
+  bottomDock.style.opacity = '1';
+
+  statusDot.className = 'w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#10b981]';
+  statusText.innerText = 'OPTIMAL';
+  footerMode.innerText = 'ANALYSIS SAVED';
+
+  if (window.networkSim && window.networkSim.setState) {
+    window.networkSim.setState('RESULT');
+  }
+
+  fetch('http://127.0.0.1:5000/api/network?target=google.com')
+    .then(response => {
+      if (!response.ok) {
+        throw new Error('API request failed: ' + response.status);
+      }
+      return response.json();
+    })
+    .then(data => {
+      document.getElementById('result-latency').textContent = data.average_latency;
+      document.getElementById('result-jitter').textContent = data.jitter;
+      document.getElementById('result-dns').textContent = data.dns_response;
+      document.getElementById('result-hops').textContent = data.route_hops;
+      document.getElementById('result-dropouts').textContent = data.route_dropouts;
+      console.log('Real network results:', data);
+      const latencyScore = Math.max(
+  0,
+  100 - Number(data.average_latency || 0)
+);
+
+const packetLossScore = Math.max(
+  0,
+  100 - Number(data.packet_loss ?? 100)
+);
+
+const healthScore = Math.round(
+  latencyScore * 0.7 + packetLossScore * 0.3
+);
+
+document.getElementById('health-score').textContent =
+  healthScore + ' / 100';
+
+    })
+    .catch(error => {
+      console.error('Network test failed:', error);
+    });
+}
+
+  </script>
+</body>
+</html>
