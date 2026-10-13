@@ -959,7 +959,7 @@ function showResults() {
     window.networkSim.setState('RESULT');
   }
 
-  fetch('http://127.0.0.1:5000/api/network?target=google.com')
+  fetch('https://network-analyzer-2-0tl8.onrender.com/api/network?target=google.com')
     .then(response => {
       if (!response.ok) {
         throw new Error('API request failed: ' + response.status);
