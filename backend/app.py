@@ -1,114 +1,139 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import subprocess
 import re
 import socket
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 app = Flask(__name__)
 CORS(app)
 
-def network_test(target):
-    # ---------- PING ----------
-    result = subprocess.run(
-        ["ping", "-c", "4", target],
-        capture_output=True,
-        text=True
-    )
+executor = ThreadPoolExecutor(max_workers=4)
 
 
-    output = result.stdout
+def ping_test(target):
+    try:
+        start = time.monotonic()
+        result = subprocess.run(
+            ["ping", "-c", "4", "-W", "1", target],
+            capture_output=True,
+            text=True,
+            timeout=6
+        )
+        output = result.stdout
 
-    times = re.findall(r"time[=<]([\d.]+)", output)
-    latencies = [float(t) for t in times]
+        times = re.findall(r"time[=<]([\d.]+)", output)
+        latencies = [float(t) for t in times]
 
-    loss_match = re.search(r"(\d+(?:\.\d+)?)% packet loss", output)
+        loss_match = re.search(r"(\d+(?:\.\d+)?)% packet loss", output)
+        packet_loss = float(loss_match.group(1)) if loss_match else 100.0
 
-    packet_loss = float(loss_match.group(1)) if loss_match else 100.0
+        average = sum(latencies) / len(latencies) if latencies else 0.0
 
-    average = (
-        sum(latencies) / len(latencies)
-        if latencies else 0
-    )
-
-    if len(latencies) > 1:
         differences = [
             abs(latencies[i] - latencies[i - 1])
             for i in range(1, len(latencies))
         ]
-        jitter = sum(differences) / len(differences)
-    else:
-        jitter = 0
+        jitter = sum(differences) / len(differences) if differences else 0.0
 
-    # ---------- DNS ----------
+        return {
+            "packets_sent": 4,
+            "packets_received": len(latencies),
+            "packet_loss": packet_loss,
+            "average_latency": round(average, 2),
+            "jitter": round(jitter, 2)
+        }
+
+    except (subprocess.TimeoutExpired, OSError):
+        return {
+            "packets_sent": 4,
+            "packets_received": 0,
+            "packet_loss": 100.0,
+            "average_latency": 0,
+            "jitter": 0
+        }
+
+
+def dns_test(target):
     try:
-        start = time.time()
+        start = time.monotonic()
         ip = socket.gethostbyname(target)
-        end = time.time()
-
-        dns_time = (end - start) * 1000
-
-    except socket.gaierror:
-        ip = "DNS resolution failed"
-        dns_time = 0
-
-    # ---------- RESULT ----------
-    return {
-        "target": target,
-        "ip": ip,
-        "packets_sent": 4,
-        "packets_received": len(latencies),
-        "packet_loss": packet_loss,
-        "average_latency": round(average, 2),
-        "jitter": round(jitter, 2),
-        "dns_response": round(dns_time, 2)
-    }
+        dns_time = (time.monotonic() - start) * 1000
+        return {"ip": ip, "dns_response": round(dns_time, 2)}
+    except (socket.gaierror, OSError):
+        return {"ip": "DNS resolution failed", "dns_response": 0}
 
 
 def traceroute_test(target):
     try:
         result = subprocess.run(
-            ["traceroute", "-m", "15", "-w", "1", target],
+            ["traceroute", "-n", "-m", "8", "-q", "1", "-w", "1", target],
             capture_output=True,
             text=True,
-            timeout=20
+            timeout=10
         )
 
-        output = result.stdout
         hops = 0
         dropouts = 0
 
-        for line in output.splitlines():
+        for line in result.stdout.splitlines():
             match = re.match(r"\s*(\d+)\s+", line)
-
             if match:
                 hops += 1
-
-                # Count a hop as a dropout if every probe timed out
                 if "*" in line and not re.search(r"\d+\.\d+\.\d+\.\d+", line):
                     dropouts += 1
 
-        return {
-            "route_hops": hops,
-            "route_dropouts": dropouts
-        }
+        return {"route_hops": hops, "route_dropouts": dropouts}
 
     except (subprocess.TimeoutExpired, OSError):
-        return {
-            "route_hops": 0,
-            "route_dropouts": 0
-        }
+        return {"route_hops": 0, "route_dropouts": 0}
+
 
 @app.route("/api/network")
 def network():
-    from flask import request
-
     target = request.args.get("target", "google.com").strip()
 
-    result = network_test(target)
-    result.update(traceroute_test(target))
+    # Accept hostnames or IPv4 addresses only.
+    if not target or len(target) > 253:
+        return jsonify({"error": "Invalid target"}), 400
+
+    try:
+        socket.inet_aton(target)
+    except OSError:
+        if not re.fullmatch(
+            r"(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(?:\.(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?))*",
+            target
+        ):
+            return jsonify({"error": "Invalid target"}), 400
+
+    dns_future = executor.submit(dns_test, target)
+    ping_future = executor.submit(ping_test, target)
+
+    dns_result = dns_future.result(timeout=3)
+    ping_result = ping_future.result(timeout=7)
+
+    # Return the fast results first; traceroute runs separately.
+    result = {
+        "target": target,
+        **dns_result,
+        **ping_result,
+        "route_hops": 0,
+        "route_dropouts": 0
+    }
+
+    def add_route():
+        return traceroute_test(target)
+
+    route_future = executor.submit(add_route)
+    try:
+        result.update(route_future.result(timeout=2))
+    except TimeoutError:
+        route_future.cancel()
+
     return jsonify(result)
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=False)
+
