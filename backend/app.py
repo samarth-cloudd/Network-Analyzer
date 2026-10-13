@@ -89,12 +89,10 @@ def traceroute_test(target):
     except (subprocess.TimeoutExpired, OSError):
         return {"route_hops": 0, "route_dropouts": 0}
 
-
 @app.route("/api/network")
 def network():
     target = request.args.get("target", "google.com").strip()
 
-    # Accept hostnames or IPv4 addresses only.
     if not target or len(target) > 253:
         return jsonify({"error": "Invalid target"}), 400
 
@@ -107,20 +105,38 @@ def network():
         ):
             return jsonify({"error": "Invalid target"}), 400
 
+    # Return ping and DNS metrics without waiting for traceroute.
+    dns_result = {"ip": "DNS resolution failed", "dns_response": 0}
+    ping_result = {
+        "packets_sent": 4,
+        "packets_received": 0,
+        "packet_loss": 100.0,
+        "average_latency": 0,
+        "jitter": 0
+    }
+
     dns_future = executor.submit(dns_test, target)
     ping_future = executor.submit(ping_test, target)
 
-    dns_result = dns_future.result(timeout=3)
-    ping_result = ping_future.result(timeout=7)
+    try:
+        dns_result = dns_future.result(timeout=3)
+    except TimeoutError:
+        pass
 
-    # Return the fast results first; traceroute runs separately.
-    result = {
+    try:
+        ping_result = ping_future.result(timeout=7)
+    except TimeoutError:
+        pass
+
+    return jsonify({
         "target": target,
         **dns_result,
         **ping_result,
         "route_hops": 0,
         "route_dropouts": 0
-    }
+    })
+
+
 
     def add_route():
         return traceroute_test(target)
